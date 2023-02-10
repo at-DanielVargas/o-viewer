@@ -1,0 +1,507 @@
+<template>
+  <div class="wrapper">
+    <div :if="state.loading" class="loader">
+      <p>Cargando...</p>
+    </div>
+    <div class="controls">
+      <div class="counter">
+        <span class="current">${state.currentPage}</span>
+        <span class="total">${state.pageCount}</span>
+      </div>
+      <div class="zoom">
+        <button @click="downZoom">-</button>
+        <input :value="(this.zooms[state.zoom] * 100) + '%'" />
+        <button @click="upZoom">+</button>
+      </div>
+      <div class="xml">
+        <button>+</button>
+      </div>
+    </div>
+    <div class="document" id="document"></div>
+  </div>
+</template>
+
+<style>
+  :host {
+    width: 100%;
+    --scale-factor: ${this.zooms[state.zoom]}
+  }
+
+  .wrapper {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    flex-direction: column;
+  }
+
+  .loader {
+    position: absolute;
+    bottom: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #fff;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .controls {
+    background-color: rgba(0, 0, 0, 0.2);
+    height: 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    position: absolute;
+    top: 0;
+    z-index: 10;
+  }
+
+  .zoom {
+    display: flex;
+  }
+
+  .zoom button {
+    color: #fff;
+    background-color: #1890ff;
+    border: none;
+    height: 25px;
+    width: 25px;
+  }
+
+  .zoom button:first-child {
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+  }
+
+  .zoom button:last-child {
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+  }
+
+  .zoom input {
+    border: none;
+    border-radius: 0;
+  }
+
+  .document {
+    background-color: #757575;
+    height: 100%;
+    overflow-y: auto;
+    text-align: center;
+    padding: 45px 0;
+  }
+
+  .document .page {
+    display: flex;
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 15px;
+  }
+
+  .document .page:last-child {
+    margin-bottom: 0;
+  }
+
+  .pdf-page {
+    position: relative;
+    background-color: #fff;
+    box-shadow: 1px 1px 6px 2px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .pdf-page .pdf-page-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+  }
+
+  .pdf-page .pdf-page-text {
+    position: absolute;
+    z-index: 2;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    opacity: 0.2;
+    line-height: 1.0;
+  }
+
+  .pdf-page .pdf-page-text ::selection {
+    background: rgb(0, 0, 255);
+  }
+
+  .pdf-page .pdf-page-text div {
+    color: transparent;
+    position: absolute;
+    cursor: text;
+    -webkit-transform-origin: 0% 0%;
+    -moz-transform-origin: 0% 0%;
+    -o-transform-origin: 0% 0%;
+    -ms-transform-origin: 0% 0%;
+    transform-origin: 0% 0%;
+  }
+
+  .pdf-page .pdf-page-signatures {
+    position: absolute;
+    z-index: 4;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  .signature {
+    display: flex;
+    width: 193px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    flex-direction: column;
+    position: absolute;
+    pointer-events: none;
+    z-index: 9;
+    left: 0;
+    box-shadow: 1px 1px 6px 2px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .signature .draw {
+    height: 74px;
+    padding: 8px;
+    border-radius: 4px 4px 0 0;
+    background-color: #fff;
+    position: relative;
+  }
+
+  .signature .draw span.circle {
+    background-color: #f90;
+    color: #fff;
+    padding: 5px 0;
+    display: flex;
+    width: 24px;
+    border-radius: 50%;
+    cursor: all-scroll;
+    pointer-events: all;
+    justify-content: center;
+    position: absolute;
+    top: 0px;
+    left: -30px;
+  }
+
+  .signature .data {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: #f90;
+    padding: 8px;
+    border-radius: 0 0 4px 4px;
+    font-size: 10px;
+  }
+
+  .signature .data .email,
+  .signature .data .name {
+    display: inline-block;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    color: #fff;
+    max-width: 100%;
+  }
+
+  .signature .data .email {
+    font-weight: 300;
+  }
+</style>
+
+<script>
+  import interactjs from 'interactjs'
+
+  export default class extends Brick {
+    pdf
+    url
+    zooms = [0.5, 0.75, 1.0, 1.5, 2.0, 3.0]
+    signatures
+
+    init() {
+      PDFJS.workerSrc =
+        'https://cdn.jsdelivr.net/npm/pdfjs-dist@1.4.129/build/pdf.worker.js'
+      this.state = {
+        url: '',
+        fileId: '',
+        signatures: [],
+        loading: false,
+        currentPage: 1,
+        pageCount: 0,
+        zoom: 2
+      }
+    }
+
+    downZoom() {
+      this.setState({ zoom: this.state.zoom - 1 })
+      this.resizeElements()
+      this.render()
+    }
+
+    upZoom() {
+      this.setState({ zoom: this.state.zoom + 1 })
+      this.resizeElements()
+      this.render()
+    }
+
+    resizeElements() {
+      if (this.document.querySelector) {
+        const renderedPages = this.document.querySelectorAll(
+          '.page[data-rendered="true"]'
+        )
+        for (let i = 0; i < renderedPages.length; i++) {
+          this.pdf.getPage(i + 1).then((page) => {
+            const container = renderedPages[i]
+            const pdfPage = container.querySelector(`.pdf-page`)
+            const textLayer = pdfPage.querySelector(`.pdf-page-text`)
+            const canvas = pdfPage.querySelector(`.pdf-page-canvas`)
+            const pageSignatures = pdfPage.querySelectorAll('.signature')
+            const ctx = canvas.getContext('2d')
+            const viewport = page.getViewport(this.zooms[this.state.zoom])
+
+            pdfPage.style.height = `${viewport.height}px`
+            pdfPage.style.width = `${viewport.width}px`
+            canvas.height = viewport.height
+            canvas.width = viewport.width
+            textLayer.style.height = `${viewport.height}px`
+            textLayer.style.width = `${viewport.width}px`
+            textLayer.innerHTML = ''
+
+            // for (let e = 0; e < pageSignatures.length; e++) {
+            //   console.log(pageSignatures[e].offsetWidth)
+            //   const scale = Math.min(
+            //     pdfPage.offsetWidth / pageSignatures[e].offsetWidth,
+            //     pdfPage.offsetHeight / pageSignatures[e].offsetHeight
+            //   )
+            //   pageSignatures[e].style.transform = `scale(${scale})`
+            // }
+
+            const renderCtx = {
+              canvasContext: ctx,
+              viewport: viewport
+            }
+
+            page.render(renderCtx)
+
+            page.getTextContent().then((text) => {
+              const textContent = PDFJS.renderTextLayer({
+                container: textLayer,
+                pageIndex: page.pageIndex,
+                viewport,
+                textContent: text,
+                textDivs: []
+              })
+            })
+          })
+        }
+      }
+    }
+
+    fetchPdf(url) {
+      if (this.pdf && this.url === url) return
+      PDFJS.getDocument(this.state.url)
+        .promise.then((data) => {
+          this.pdf = data
+          this.render({ pageCount: data.pdfInfo.numPages })
+          this.preparePages()
+          this.renderPage()
+        })
+        .catch((err) => {
+          alert(err.message)
+        })
+    }
+
+    preparePages() {
+      if (this.document.querySelector) {
+        const observer = new IntersectionObserver(
+          (entries) => {
+            const showedEntries = entries.filter(
+              (entry) => entry.intersectionRatio >= 0.1
+            )
+
+            showedEntries.forEach((entry) => {
+              const rendered = entry.target.getAttribute('data-rendered')
+              const pageNumber = parseInt(
+                entry.target.getAttribute('data-page')
+              )
+
+              if (!rendered && pageNumber) {
+                this.setState({ currentPage: pageNumber })
+                this.render()
+                this.renderPage()
+              }
+            })
+          },
+          {
+            threshold: 0.1,
+            rootMargin: '0px',
+            root: this.document.querySelector('#document')
+          }
+        )
+
+        for (let i = 1; i <= this.state.pageCount; i++) {
+          const page = document.createElement('div')
+          this.preparePage(i, page, observer)
+          this.document.querySelector('#document')?.appendChild(page)
+        }
+      }
+    }
+
+    preparePage(number, container, observer) {
+      this.pdf.getPage(1).then((page) => {
+        const viewport = page.getViewport(this.zooms[this.state.zoom])
+        const pdfPage = document.createElement('div')
+        const canvas = document.createElement('canvas')
+        const textLayer = document.createElement('div')
+        const pageSignatures = document.createElement('div')
+
+        pdfPage.className = 'pdf-page'
+        textLayer.className = 'pdf-page-text'
+        canvas.className = 'pdf-page-canvas'
+        pageSignatures.className = 'pdf-page-signatures'
+        container.className = `page page-number page-${number} rendering`
+        container.setAttribute('data-page', number.toString())
+        pageSignatures.setAttribute('data-page', number.toString())
+
+        pageSignatures.style.height = `${viewport.height}px`
+        pageSignatures.style.width = `${viewport.width}px`
+
+        interactjs(pageSignatures).dropzone({
+          accept: '.signature', ondrop: function (event) {
+            console.log(event.currentTarget)
+          }
+        })
+
+        pdfPage.style.height = `${viewport.height}px`
+        pdfPage.style.width = `${viewport.width}px`
+        canvas.height = viewport.height
+        canvas.width = viewport.width
+        textLayer.style.height = `${viewport.height}px`
+        textLayer.style.width = `${viewport.width}px`
+
+        pdfPage.appendChild(canvas)
+        pdfPage.appendChild(textLayer)
+        pdfPage.appendChild(pageSignatures)
+        container.appendChild(pdfPage)
+        observer.observe(container)
+      })
+    }
+
+    renderPage() {
+      if (this.document.querySelector) {
+        this.pdf.getPage(this.state.currentPage).then((page) => {
+          const container = this.document.querySelector(
+            `.page-${this.state.currentPage}`
+          )
+          if (container) {
+            container.setAttribute('data-rendered', 'true')
+            container.classList.remove('rendering')
+            const pdfPage = container.querySelector(`.pdf-page`)
+            const textLayer = pdfPage.querySelector(`.pdf-page-text`)
+            const canvas = pdfPage.querySelector(`.pdf-page-canvas`)
+            const pageSignatures = pdfPage.querySelector(`.pdf-page-signatures`)
+            const ctx = canvas.getContext('2d')
+            const viewport = page.getViewport(this.zooms[this.state.zoom])
+
+            pdfPage.style.height = `${viewport.height}px`
+            pdfPage.style.width = `${viewport.width}px`
+            canvas.height = viewport.height
+            canvas.width = viewport.width
+            textLayer.style.height = `${viewport.height}px`
+            textLayer.style.width = `${viewport.width}px`
+            textLayer.innerHTML = ''
+
+            this.signatures
+              .filter((s) => s.page === this.state.currentPage)
+              .forEach((signature) => {
+                const card = document.createElement('div')
+                card.style.top = `${signature.coords.y}px`
+                card.style.left = `${signature.coords.x}px`
+                card.className = 'signature'
+                card.innerHTML = `<div class="signature">
+      <div class="draw">
+        <span class="fal fa-thumbtack circle"></span>
+      </div>
+      <div class="data">
+        <div class="name">${signature.owner.name}</div>
+        <div class="email">${signature.owner.email}</div>
+      </div>
+    </div>`;
+                interactjs(card)
+                  .allowFrom('.circle')
+                  .draggable({
+                    inertia: false,
+                    autoScroll: { container: pageSignatures },
+                    onmove(event) {
+                      var target = event.target
+                      // keep the dragged position in the data-x/data-y attributes
+                      var x =
+                        (parseFloat(target.getAttribute('data-x')) || 0) +
+                        event.dx
+                      var y =
+                        (parseFloat(target.getAttribute('data-y')) || 0) +
+                        event.dy
+
+                      console.log({
+                        coords: {
+                          y: (event.target.offsetTop + y),
+                          x: (event.target.offsetLeft + x)
+                        },
+                      })
+
+                      // translate the element
+                      target.style.webkitTransform = target.style.transform =
+                        'translate(' + x + 'px, ' + y + 'px)'
+
+                      // update the posiion attributes
+                      target.setAttribute('data-x', x)
+                      target.setAttribute('data-y', y)
+                    }
+                  })
+                pageSignatures.appendChild(card)
+              })
+
+            const renderCtx = {
+              canvasContext: ctx,
+              viewport: viewport
+            }
+
+            page.render(renderCtx)
+
+            page.getTextContent().then((text) => {
+              const textContent = PDFJS.renderTextLayer({
+                container: textLayer,
+                pageIndex: page.pageIndex,
+                viewport,
+                textContent: text,
+                textDivs: []
+              })
+            })
+          }
+
+        })
+      }
+    }
+
+    parseSignatures(signatures) {
+      if (!signatures) return
+      const decoded = JSON.parse(decodeURIComponent(signatures))
+      this.signatures = decoded
+    }
+
+    changed(props) {
+      this.url = this.state.url
+      this.fetchPdf(this.state.url)
+      this.parseSignatures(this.state.signatures)
+    }
+  }
+</script>
