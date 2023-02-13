@@ -6,7 +6,7 @@ const ctx = await esbuild.context({
   entryPoints: ['./dist/index.js'],
   bundle: true,
   outfile: './dist/bundle.js',
-  //   minify: true,
+  minify: true,
   target: ['es2022'],
   plugins: [
     //   CssModulesPlugin({
