@@ -1,20 +1,20 @@
 <div class="wrapper">
-    <div :if="this.loading" class="loader">
+  <!-- <div class="loader">
         <p>Cargando...</p>
+    </div> -->
+  <div class="controls">
+    <div class="counter">
+      <span class="current"></span>
+      <span class="total"></span>
     </div>
-    <div class="controls">
-        <div class="counter">
-            <span class="current">${this.currentPage}</span>
-            <span class="total">${this.pageCount}</span>
-        </div>
-        <div class="zoom">
-            <button @click="downZoom">-</button>
-            <input :value="(this.zooms[this.zoom] * 100) + '%'" />
-            <button @click="upZoom">+</button>
-        </div>
-        <div class="xml">
-            <button>+</button>
-        </div>
+    <div class="zoom">
+      <button id="downZoom">-</button>
+      <input id="zoom" readonly />
+      <button id="upZoom">+</button>
     </div>
-    <div class="document" id="document"></div>
+    <div class="xml">
+      <button>+</button>
+    </div>
+  </div>
+  <div class="document" id="document"></div>
 </div>

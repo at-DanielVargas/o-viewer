@@ -83,13 +83,19 @@ export const CustomElement = (args: CustomElementMetadata) => {
 
       __render() {
         if (this.__connected) return
-        // const template = document.createElement('template')
-        // const style = `${args.style ? `<style>${args.style}</style>` : ''}`
-        // template.innerHTML = `${style}${args.template ? args.template : ''}`
-        // ;(this.showShadowRoot ? this.shadowRoot : this).appendChild(
-        //   document.importNode(template.content, true)
-        // )
-        return render(args.template)
+        const template = document.createElement('template')
+        const style = `${
+          args.style
+            ? `<style>${args.style}</style>`
+            : `<style>${args.styleUrl}</style>`
+        }`
+        template.innerHTML = `${style}${
+          args.template ? args.template : args.templateUrl
+        }`
+        ;(this.showShadowRoot ? this.shadowRoot : this).appendChild(
+          document.importNode(template.content, true)
+        )
+        // return render(args.template)
       }
     }
 

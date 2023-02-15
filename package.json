@@ -20,6 +20,7 @@
   "devDependencies": {
     "@polight/lego": "^1.8.0",
     "@types/node": "^18.13.0",
+    "@types/pdfjs-dist": "^0.1.2",
     "concurrently": "^7.6.0",
     "esbuild": "^0.17.6",
     "esbuild-plugin-copy": "^2.0.2",

@@ -109,7 +109,7 @@ export default {
             }
             const filePath = path.resolve(parts.join(path.sep))
             const contents = await fs.promises.readFile(filePath, 'utf8')
-            resolve(parse(contents))
+            resolve(normalize(contents))
           })
         })
       }
@@ -117,26 +117,20 @@ export default {
       const regex =
         /@CustomElement\(\{\s*tag:\s*'[^']*',\s*templateUrl:\s*'([^']*)',\s*styleUrl:\s*'([^']*)'\s*\}\)/gm
       const matches = regex.exec(contents)
-      const replaces = []
+
       if (args.path.indexOf('src') !== -1) {
         if (matches && matches.length >= 3) {
-          replaces.push(await getContentFolder(args.path, matches[1]))
-          replaces.push(await getContentFolder(args.path, matches[2]))
-        }
-
-        const repRegex =
-          /@CustomElement\(\{\s*tag:\s*'[^']*',\s*templateUrl:\s*(.*),\s*styleUrl:\s*(.*)\s*\}\)/gm
-        const repMatches = repRegex.exec(normalize(contents))
-
-        if (repMatches && repMatches.length >= 3) {
-          for (let index = 1; index < repMatches.length; index++) {
-            contents = contents.replace(repMatches[index], replaces[index - 1])
-          }
+          contents = contents.replace(
+            matches[1],
+            `${await getContentFolder(args.path, normalize(matches[1]))}`
+          )
+          contents = contents.replace(
+            matches[2],
+            await getContentFolder(args.path, matches[2])
+          )
         }
       }
-
-      const result = `import { h } from 'petit-dom'; ${contents}`
-      return { contents: result, loader: 'ts' }
+      return { contents, loader: 'ts' }
     })
   }
 }
