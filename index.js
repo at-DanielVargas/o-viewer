@@ -1,23 +1,27 @@
 import * as esbuild from 'esbuild'
 import servor from 'servor'
-import { copy } from 'esbuild-plugin-copy'
+import parser from './core/vdom-parser.js'
 
 const ctx = await esbuild.context({
-  entryPoints: ['./dist/index.js'],
+  entryPoints: ['src/index.ts'],
   bundle: true,
   outfile: './dist/bundle.js',
-  minify: true,
-  target: ['es2022'],
+  // minify: true,
+  target: ['es6'],
+  loader: {
+    '.css': 'text'
+  },
   plugins: [
+    parser
     //   CssModulesPlugin({
     //     inject: true,
     //   }),
-    copy({
-      assets: {
-        from: ['node_modules/pdfjs-dist/build/pdf.worker.js'],
-        to: ['./pdf.worker.js']
-      }
-    })
+    // copy({
+    //   assets: {
+    //     from: ['node_modules/pdfjs-dist/build/pdf.worker.js'],
+    //     to: ['./pdf.worker.js']
+    //   }
+    // })
   ]
 })
 

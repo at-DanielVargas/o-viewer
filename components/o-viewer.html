@@ -27,13 +27,13 @@
     }
 
     downZoom() {
-      this.setState({ zoom: this.state.zoom - 1 })
+      this.setState({zoom: this.state.zoom - 1})
       this.resizeElements()
       this.render()
     }
 
     upZoom() {
-      this.setState({ zoom: this.state.zoom + 1 })
+      this.setState({zoom: this.state.zoom + 1})
       this.resizeElements()
       this.render()
     }
@@ -68,35 +68,30 @@
               const prevTop = parseInt(signatures[e].getAttribute('data-top'))
               const prevLeft = parseInt(signatures[e].getAttribute('data-left'))
 
-              signatures[e].style.width = `${
-                195 *
+              signatures[e].style.width = `${195 *
                 (pdfPage.offsetWidth / viewport.width) *
                 this.zooms[this.state.zoom]
-              }px`
-              signatures[e].style.height = `${
-                139 *
+                }px`
+              signatures[e].style.height = `${139 *
                 (pdfPage.offsetHeight / viewport.height) *
                 this.zooms[this.state.zoom]
-              }px`
-              signatures[e].style.top = `${
-                prevTop *
+                }px`
+              signatures[e].style.top = `${prevTop *
                 (pdfPage.offsetHeight / viewport.height) *
                 this.zooms[this.state.zoom]
-              }px`
-              signatures[e].style.left = `${
-                prevLeft *
+                }px`
+              signatures[e].style.left = `${prevLeft *
                 (pdfPage.offsetWidth / viewport.width) *
                 this.zooms[this.state.zoom]
-              }px`
+                }px`
 
-              const fontSize = `${
-                10 *
+              const fontSize = `${10 *
                 (signatures[e].offsetWidth /
                   (195 *
                     (pdfPage.offsetWidth / viewport.width) *
                     this.zooms[this.state.zoom])) *
                 this.zooms[this.state.zoom]
-              }px`
+                }px`
               const dataContainer = signatures[e].querySelector('.data')
               dataContainer.style.fontSize = fontSize
             }
@@ -127,12 +122,18 @@
       PDFJS.getDocument(this.state.url)
         .promise.then((data) => {
           this.pdf = data
-          this.render({ pageCount: data.pdfInfo.numPages })
+          this.render({pageCount: data.pdfInfo.numPages})
           this.preparePages()
           this.renderPage()
         })
-        .catch((err) => {
-          console.error(err.message)
+        .catch((error) => {
+          this.dispatchEvent(
+            new CustomEvent('downloadError', {
+              detail: {
+                error
+              }
+            })
+          )
         })
     }
 
@@ -151,7 +152,7 @@
               )
 
               if (!rendered && pageNumber) {
-                this.setState({ currentPage: pageNumber })
+                this.setState({currentPage: pageNumber})
                 this.render()
                 this.renderPage()
               }
@@ -194,11 +195,22 @@
         interactjs(pageSignatures).dropzone({
           accept: '.signature',
           ondrop: (event) => {
-            console.log(event)
+            const droppedElement = event.relatedTarget
             this.dispatchEvent(
-              new CustomEvent('signatureMoved', {
+              new CustomEvent('signatureChanged', {
                 detail: {
-                  page: parseInt(event.target.getAttribute('data-page'))
+                  owner: {
+                    id: parseInt(droppedElement.getAttribute('data-owner'))
+                  },
+                  coords: {
+                    page: parseInt(event.target.getAttribute('data-page')),
+                    y:
+                      parseFloat(droppedElement.getAttribute('data-y')) +
+                      parseFloat(droppedElement.getAttribute('data-top')),
+                    x:
+                      parseFloat(droppedElement.getAttribute('data-x')) +
+                      parseFloat(droppedElement.getAttribute('data-left'))
+                  }
                 }
               })
             )
@@ -266,7 +278,7 @@
                   .allowFrom('.circle')
                   .draggable({
                     inertia: false,
-                    autoScroll: { container: pageSignatures },
+                    autoScroll: {container: pageSignatures},
                     onmove(event) {
                       var target = event.target
                       // keep the dragged position in the data-x/data-y attributes
@@ -324,6 +336,7 @@
     }
 
     changed(props) {
+      console.log({savedUrl: this.url, newUrl: this.state.url})
       if (this.url !== this.state.url) {
         this.url = this.state.url
         this.fetchPdf(this.state.url)

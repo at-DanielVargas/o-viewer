@@ -5,26 +5,26 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"node_modules/.bin/lego\" \"node index.js\" "
+    "dev": "concurrently \"node_modules/.bin/lego\" \"node index.js\" ",
+    "start": "node index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "interactjs": "^1.10.17",
-    "pdfjs-dist": "^1.4.129"
+    "parse5": "^5.1.1",
+    "pdfjs-dist": "^1.4.129",
+    "petit-dom": "^0.6.0"
   },
   "devDependencies": {
     "@polight/lego": "^1.8.0",
-    "esbuild-plugin-copy": "^2.0.2",
+    "@types/node": "^18.13.0",
     "concurrently": "^7.6.0",
     "esbuild": "^0.17.6",
-    "eslint": "^8.33.0",
-    "eslint-config-standard": "^17.0.0",
-    "eslint-plugin-import": "^2.27.5",
-    "eslint-plugin-n": "^15.6.1",
-    "eslint-plugin-promise": "^6.1.1",
+    "esbuild-plugin-copy": "^2.0.2",
     "prettier": "^2.8.4",
-    "servor": "^4.0.2"
+    "servor": "^4.0.2",
+    "typescript": "^3.3.3333"
   }
 }
