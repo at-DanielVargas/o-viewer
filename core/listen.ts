@@ -47,6 +47,23 @@ const addEventListeners = (target: any) => {
   }
 }
 
+const removeEventListeners = (target: any) => {
+  if (target.constructor.listeners) {
+    const targetRoot: any = target.shadowRoot || target
+    for (const listener of target.constructor
+      .listeners as Array<ListenerMetadata>) {
+      const eventTarget = listener.selector
+        ? targetRoot.querySelector(listener.selector)
+          ? targetRoot.querySelector(listener.selector)
+          : null
+        : target
+      if (eventTarget) {
+        eventTarget.removeEventListener(listener.eventName)
+      }
+    }
+  }
+}
+
 const Dispatch = (eventName?: string) => {
   return (target: HTMLElement, propertyName: string) => {
     function get() {
@@ -54,7 +71,6 @@ const Dispatch = (eventName?: string) => {
       return {
         emit(options?: CustomEventOptions) {
           const evtName = eventName ? eventName : toDotCase(propertyName)
-          console.log(evtName)
           self.dispatchEvent(new CustomEvent(evtName, options))
         }
       }
@@ -66,6 +82,7 @@ const Dispatch = (eventName?: string) => {
 export {
   Listen,
   addEventListeners,
+  removeEventListeners,
   DispatchEmitter,
   Dispatch,
   CustomEventOptions,
