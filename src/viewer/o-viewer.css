@@ -149,6 +149,23 @@
   box-shadow: 1px 1px 6px 2px rgba(0, 0, 0, 0.2) !important;
 }
 
+.pdf-page .page-loader {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #fff;
+}
+
+.pdf-page .page-loader.hidden {
+  display: none;
+}
+
 .pdf-page .pdf-page-canvas {
   position: absolute;
   top: 0;

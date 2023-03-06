@@ -4,12 +4,23 @@ import {
   DispatchEmitter,
   Listen,
   Prop,
-  Toggle,
   Watch
 } from 'custom-elements-ts'
-declare const PDFJS
-declare const Prism
+declare const PDFJS: any
+declare const Prism: any
 import interactjs from 'interactjs'
+
+export interface IViewport {
+  viewBox: number[]
+  scale: number
+  rotation: number
+  offsetX: number
+  offsetY: number
+  transform: number[]
+  width: number
+  height: number
+  fontScale: number
+}
 
 @CustomElement({
   tag: 'o-viewer',
@@ -28,6 +39,7 @@ export class OrigonViewer extends HTMLElement {
   __windowSize: number
   __xmlData: string
   __showXml: boolean = false
+  __applyingZoom: boolean = false
   __locales = {
     es: {
       show_pdf: 'Ver Pdf',
@@ -69,7 +81,7 @@ export class OrigonViewer extends HTMLElement {
   @Watch('raw')
   parseRaw() {
     if (this.raw !== '' && this.raw !== 'null' && this.raw !== 'undefined') {
-      const blobUrl = this.getUrlFromData(this.raw)
+      const blobUrl = this.getUrlFromData(this.detectAndParseRaw(this.raw))
       PDFJS.getDocument(blobUrl)
         .promise.then((data) => {
           this.shadowRoot.querySelector('#document').scrollTo(0, 0)
@@ -79,7 +91,6 @@ export class OrigonViewer extends HTMLElement {
           this.__pdf = data
           this.__pageCount = data.numPages
           this.preparePages()
-          this.renderPage()
         })
         .catch((error) => {
           this.error.emit({
@@ -101,9 +112,9 @@ export class OrigonViewer extends HTMLElement {
     this.__currentLang = this.__locales[`${this.lang}`]
     const button =
       this.shadowRoot.querySelector<HTMLButtonElement>('#xmlToggle')
-    const loadingText = (this.shadowRoot.querySelector<HTMLParagraphElement>(
+    this.shadowRoot.querySelector<HTMLParagraphElement>(
       '#loadingText'
-    ).innerText = this.__currentLang.loading_text)
+    ).innerText = this.__currentLang.loading_text
     button.innerHTML = this.__showXml
       ? this.__currentLang.show_pdf
       : this.__currentLang.show_xml
@@ -155,7 +166,6 @@ export class OrigonViewer extends HTMLElement {
             this.__pdf = data
             this.__pageCount = data.numPages
             this.preparePages()
-            this.renderPage()
           })
           .catch((error) => {
             this.error.emit({
@@ -177,7 +187,7 @@ export class OrigonViewer extends HTMLElement {
 
   @Listen('click', '#downZoom')
   downZoom() {
-    if (this.__zoom === 0) return
+    if (this.__zoom === 0 || this.__applyingZoom) return
     this.__zoom = this.__zoom - 1
     this.resizeElements()
     this.renderZoom()
@@ -185,7 +195,7 @@ export class OrigonViewer extends HTMLElement {
 
   @Listen('click', '#upZoom')
   upZoom() {
-    if (this.__zoom === 5) return
+    if (this.__zoom === 5 || this.__applyingZoom) return
     this.__zoom = this.__zoom + 1
     this.resizeElements()
     this.renderZoom()
@@ -226,10 +236,8 @@ export class OrigonViewer extends HTMLElement {
           const rendered = entry.target.getAttribute('data-rendered')
           const pageNumber = parseInt(entry.target.getAttribute('data-page'))
 
-          if (!rendered && pageNumber) {
-            this.__currentPage = pageNumber
-            this.renderPage()
-          }
+          this.__currentPage = pageNumber
+          this.renderPage()
         })
       },
       {
@@ -242,7 +250,7 @@ export class OrigonViewer extends HTMLElement {
     for (let i = 1; i <= this.__pageCount; i++) {
       const page = document.createElement('div')
       this.buildPage(i, page, observer)
-      this.shadowRoot.querySelector('#document')?.appendChild(page)
+      this.shadowRoot.querySelector('#document').appendChild(page)
     }
   }
 
@@ -254,12 +262,18 @@ export class OrigonViewer extends HTMLElement {
     this.__pdf.getPage(1).then((page) => {
       const viewport = page.getViewport(this.__zooms[this.__zoom])
       const pdfPage = document.createElement('div')
+      const loader = document.createElement('div')
       const canvas = document.createElement('canvas')
       const textLayer = document.createElement('div')
 
       pdfPage.className = 'pdf-page'
       textLayer.className = 'pdf-page-text'
       canvas.className = 'pdf-page-canvas'
+
+      const clone: HTMLTemplateElement =
+        this.shadowRoot.querySelector('#loaderSVG')
+      loader.appendChild(clone.content.cloneNode(true))
+      loader.classList.add('page-loader')
 
       container.className = `page page-number page-${number} rendering`
       container.setAttribute('data-page', number.toString())
@@ -273,6 +287,7 @@ export class OrigonViewer extends HTMLElement {
 
       pdfPage.appendChild(canvas)
       pdfPage.appendChild(textLayer)
+      pdfPage.appendChild(loader)
 
       if (this.__displaySignatures) {
         const getPositionRelativeTo = (
@@ -368,9 +383,9 @@ export class OrigonViewer extends HTMLElement {
           pdfPage.querySelector(`.pdf-page-text`)
         const canvas: HTMLCanvasElement =
           pdfPage.querySelector(`.pdf-page-canvas`)
-
+        const loader = pdfPage.querySelector('.page-loader')
         const ctx = canvas.getContext('2d')
-        const viewport = page.getViewport(this.__zooms[this.__zoom])
+        const viewport = page.getViewport(this.__zooms[this.__zoom], 0, true)
 
         pdfPage.style.height = `${viewport.height}px`
         pdfPage.style.width = `${viewport.width}px`
@@ -420,13 +435,19 @@ export class OrigonViewer extends HTMLElement {
               pageSignatures.appendChild(card)
             })
         }
+        ctx.clearRect(0, 0, viewport.width, viewport.height)
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillRect(0, 0, viewport.width, viewport.height)
 
         const renderCtx = {
           canvasContext: ctx,
           viewport: viewport
         }
 
-        page.render(renderCtx)
+        page.render(renderCtx).then(() => {
+          loader.classList.add('hidden')
+          this.__applyingZoom = false
+        })
 
         page.getTextContent().then((text) => {
           const textContent = PDFJS.renderTextLayer({
@@ -442,10 +463,9 @@ export class OrigonViewer extends HTMLElement {
   }
 
   resizeElements() {
-    const printResolution = this.__zoom * window.devicePixelRatio
-    const renderedPages = this.shadowRoot.querySelectorAll(
-      '.page[data-rendered="true"]'
-    )
+    this.__applyingZoom = true
+    this.shadowRoot.querySelector('#document').scrollTo(0, 0)
+    const renderedPages = this.shadowRoot.querySelectorAll('.page')
     for (let i = 0; i < renderedPages.length; i++) {
       this.__pdf.getPage(i + 1).then((page) => {
         const container = renderedPages[i]
@@ -454,73 +474,46 @@ export class OrigonViewer extends HTMLElement {
           pdfPage.querySelector(`.pdf-page-text`)
         const canvas: HTMLCanvasElement =
           pdfPage.querySelector(`.pdf-page-canvas`)
-
+        const loader = container.querySelector('.page-loader')
         const ctx = canvas.getContext('2d')
-        const viewport = page.getViewport(this.__zooms[this.__zoom])
+        const viewport = page.getViewport(this.__zooms[this.__zoom], 0, true)
 
         pdfPage.style.height = `${viewport.height}px`
         pdfPage.style.width = `${viewport.width}px`
         canvas.height = viewport.height
         canvas.width = viewport.width
-        canvas.style.width = `${Math.ceil(viewport.width / printResolution)}px`
-        canvas.style.height = `${Math.ceil(
-          viewport.height / printResolution
-        )}px`
+        canvas.style.width = `${viewport.width}px`
+        canvas.style.height = `${viewport.height}px`
         textLayer.style.height = `${viewport.height}px`
         textLayer.style.width = `${viewport.width}px`
         textLayer.innerHTML = ''
+        loader.classList.remove('hidden')
 
         if (this.__displaySignatures) {
           const pageSignatures: HTMLDivElement = pdfPage.querySelector(
             '.pdf-page-signatures'
           )
-          const signatures =
-            pdfPage.querySelectorAll<HTMLDivElement>('.signature')
 
           pageSignatures.style.height = `${viewport.height}px`
           pageSignatures.style.width = `${viewport.width}px`
 
-          const initialWidth = Math.floor(viewport.viewBox[2])
-          const initialHeight = Math.floor(viewport.viewBox[3])
-          const currentWidth = Math.floor(viewport.width)
-          const currentHeight = Math.floor(viewport.height)
-          const widthScaleFactor = currentWidth / initialWidth
-          const heightScaleFactor = currentHeight / initialHeight
-
-          for (let e = 0; e < signatures.length; e++) {
-            const signature = signatures[e]
-            if (this.__zoom > 2 || this.__zoom < 2) {
-              signature.style.display = 'none'
-            } else {
-              signature.style.display = 'flex'
-
-              const initialWidth = this.__elementSizes.signatures.width
-              const initialHeight = this.__elementSizes.signatures.height
-              const initialArea = initialWidth * initialHeight
-              const currentArea =
-                initialArea * widthScaleFactor * heightScaleFactor
-              const scaleFactor = Math.sqrt(currentArea / initialArea)
-              const newWidth = initialWidth * scaleFactor
-              const newHeight = initialHeight * scaleFactor
-              const initialX = parseInt(signature.getAttribute('data-left'))
-              const initialY = parseInt(signature.getAttribute('data-top'))
-              const currentX = initialX * widthScaleFactor
-              const currentY = initialY * heightScaleFactor
-
-              signature.style.width = newWidth + 'px'
-              signature.style.height = newHeight + 'px'
-              signature.style.left = currentX + 'px'
-              signature.style.top = currentY + 'px'
-            }
-          }
+          this.scaleSignature(pageSignatures, viewport)
         }
+        ctx.clearRect(0, 0, viewport.width, viewport.height)
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillRect(0, 0, viewport.width, viewport.height)
 
         const renderCtx = {
           canvasContext: ctx,
           viewport: viewport
         }
 
-        page.render(renderCtx)
+        page.render(renderCtx).then(() => {
+          if (i === 0) {
+            loader.classList.add('hidden')
+          }
+          this.__applyingZoom = false
+        })
 
         page.getTextContent().then((text) => {
           const textContent = PDFJS.renderTextLayer({
@@ -536,7 +529,7 @@ export class OrigonViewer extends HTMLElement {
   }
 
   getColorFromEmail(email: string) {
-    const hash = email.split('').reduce(function (prev, next) {
+    const hash = email.split('').reduce(function(prev, next) {
       return (prev << 5) - prev + next.charCodeAt(0)
     }, 0)
 
@@ -586,5 +579,40 @@ export class OrigonViewer extends HTMLElement {
     const byteArray = new Uint8Array(byteNumbers)
     const blob = new Blob([byteArray], { type: 'application/pdf' })
     return URL.createObjectURL(blob)
+  }
+
+  scaleSignature(parent: HTMLDivElement, viewport: IViewport) {
+    const signatures = parent.querySelectorAll('.signature')
+    const originalScale = 10
+
+    signatures.forEach((signature: HTMLDivElement) => {
+      const originalWidth = this.__elementSizes.signatures.width
+      const originalHeight = this.__elementSizes.signatures.height
+      const newWidth = (originalWidth * viewport.width) / viewport.viewBox[2]
+      const newHeight = (originalHeight * viewport.height) / viewport.viewBox[3]
+
+      const originalX = parseInt(signature.getAttribute('data-left'))
+      const originalY = parseInt(signature.getAttribute('data-top'))
+
+      const newX = (originalX * parent.offsetWidth) / viewport.viewBox[2]
+      const newY = (originalY * parent.offsetHeight) / viewport.viewBox[3]
+
+      const newScale =
+        (parent.offsetWidth / viewport.viewBox[2]) * originalScale
+
+      signature.style.width = `${newWidth}px`
+      signature.style.height = `${newHeight}px`
+      signature.style.left = `${newX}px`
+      signature.style.top = `${newY}px`
+      signature.style.fontSize = `${newScale}px`
+    })
+  }
+
+  detectAndParseRaw(raw: string) {
+    let b64 = decodeURIComponent(raw)
+    if (b64.indexOf('application/pdf') !== -1) {
+      b64 = b64.split(',').pop()
+    }
+    return b64
   }
 }
