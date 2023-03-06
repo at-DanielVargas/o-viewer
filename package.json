@@ -1,15 +1,15 @@
 {
-  "name": "o-viewer",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "literax-pdf-viewer",
+  "version": "1.0.3",
+  "description": "Visor de documentos pdf",
+  "main": "dist/bundle.js",
+  "unpkg": "dist/bundle.js",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"node_modules/.bin/lego\" \"node index.js\" ",
-    "start": "node index.js"
+    "dev": "node index.js",
+    "build": "node build.js"
   },
   "keywords": [],
-  "author": "",
   "license": "ISC",
   "dependencies": {
     "interactjs": "^1.10.17",
@@ -24,6 +24,7 @@
     "concurrently": "^7.6.0",
     "esbuild": "^0.17.6",
     "esbuild-plugin-copy": "^2.0.2",
+    "lint-staged": "^13.1.2",
     "prettier": "^2.8.4",
     "servor": "^4.0.2",
     "typescript": "^3.3.3333"

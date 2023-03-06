@@ -1,1 +1,1 @@
-import './viewer/viewer'
+import './viewer/o-viewer'

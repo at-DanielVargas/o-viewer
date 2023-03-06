@@ -1,195 +1,409 @@
 :host {
-    width: 100%;
-    --scale-factor: ${this.zooms[state.zoom]}
-  }
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
 
-  .wrapper {
-    display: flex;
-    width: 100%;
-    height: 100%;
-    position: relative;
-    flex-direction: column;
-  }
+.wrapper {
+  display: flex;
+  position: absolute;
+  flex-direction: column;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
 
-  .loader {
-    position: absolute;
-    bottom: 0;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: #fff;
-    z-index: 1;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-  }
+.loader {
+  position: absolute;
+  bottom: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
 
-  .controls {
-    background-color: rgba(0, 0, 0, 0.2);
-    height: 32px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    position: absolute;
-    top: 0;
-    z-index: 10;
-  }
+.loader.hidden {
+  display: none;
+}
 
-  .zoom {
-    display: flex;
-  }
+.loader p {
+  margin: 0;
+  padding: 0;
+}
 
-  .zoom button {
-    color: #fff;
-    background-color: #1890ff;
-    border: none;
-    height: 25px;
-    width: 25px;
-  }
+.controls {
+  background-color: rgba(0, 0, 0, 0.2);
+  height: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  z-index: 10;
+}
 
-  .zoom button:first-child {
-    border-top-left-radius: 4px;
-    border-bottom-left-radius: 4px;
-  }
+.controls .counter,
+.controls .xml {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  width: 80px;
+  justify-content: flex-end;
+  padding: 0 5px;
+  box-sizing: border-box;
+}
 
-  .zoom button:last-child {
-    border-top-right-radius: 4px;
-    border-bottom-right-radius: 4px;
-  }
+.controls .xml button {
+  color: #fff;
+  background-color: #1890ff;
+  border: none;
+  height: 25px;
+  border-radius: 2px;
+  cursor: pointer;
+}
 
-  .zoom input {
-    border: none;
-    border-radius: 0;
-  }
+.controls .xml button.hidden {
+  display: none;
+}
 
-  .document {
-    background-color: #757575;
-    height: 100%;
-    overflow-y: auto;
-    text-align: center;
-    padding: 45px 0;
-  }
+.controls .zoom {
+  display: flex;
+}
 
-  .document .page {
-    display: flex;
-    text-align: center;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 15px;
-  }
+.controls .zoom button {
+  color: #fff;
+  background-color: #1890ff;
+  border: none;
+  height: 25px;
+  width: 25px;
+  cursor: pointer;
+}
 
-  .document .page:last-child {
-    margin-bottom: 0;
-  }
+.controls .zoom button:first-child {
+  border-top-left-radius: 2px;
+  border-bottom-left-radius: 2px;
+}
 
-  .pdf-page {
-    position: relative;
-    background-color: #fff;
-    box-shadow: 1px 1px 6px 2px rgba(0, 0, 0, 0.2) !important;
-  }
+.controls .zoom button:last-child {
+  border-top-right-radius: 2px;
+  border-bottom-right-radius: 2px;
+}
 
-  .pdf-page .pdf-page-canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 1;
-  }
+.controls .zoom input {
+  border: none;
+  border-radius: 0;
+  width: 50px;
+  text-align: center;
+}
 
-  .pdf-page .pdf-page-text {
-    position: absolute;
-    z-index: 2;
-    left: 0;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    overflow: hidden;
-    opacity: 0.2;
-    line-height: 1.0;
-  }
+.controls .zoom input:focus {
+  border-color: transparent;
+}
 
-  .pdf-page .pdf-page-text ::selection {
-    background: rgb(0, 0, 255);
-  }
+.wrapper > .xml {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 8;
+  padding: 45px;
+  overflow: hidden;
+  background-color: #757575;
+}
 
-  .pdf-page .pdf-page-text div {
-    color: transparent;
-    position: absolute;
-    cursor: text;
-    -webkit-transform-origin: 0% 0%;
-    -moz-transform-origin: 0% 0%;
-    -o-transform-origin: 0% 0%;
-    -ms-transform-origin: 0% 0%;
-    transform-origin: 0% 0%;
-  }
+.wrapper > .xml.hidden {
+  display: none;
+}
 
-  .pdf-page .pdf-page-signatures {
-    position: absolute;
-    z-index: 4;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-  }
+.document {
+  background-color: #757575;
+  height: 100%;
+  overflow-y: auto;
+  text-align: center;
+  padding: 45px 0;
+}
 
-  .signature {
-    display: flex;
-    width: 193px;
-    height: 139px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-    flex-direction: column;
-    position: absolute;
-    pointer-events: none;
-    z-index: 9;
-    left: 0;
-    box-shadow: 1px 1px 6px 2px rgba(0, 0, 0, 0.2) !important;
-  }
+.document .page {
+  display: flex;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 15px;
+}
 
-  .signature .draw {
-    height: 100%;
-    padding: 8px;
-    border-radius: 4px 4px 0 0;
-    background-color: #fff;
-    position: relative;
-  }
+.document .page:last-child {
+  margin-bottom: 0;
+}
 
-  .signature .draw span.circle {
-    background-color: #f90;
-    color: #fff;
-    display: flex;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    cursor: all-scroll;
-    pointer-events: all;
-    justify-content: center;
-    position: absolute;
-    top: 0px;
-    left: -30px;
-  }
+.pdf-page {
+  position: relative;
+  background-color: #fff;
+  box-shadow: 1px 1px 6px 2px rgba(0, 0, 0, 0.2) !important;
+}
 
-  .signature .data {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    background-color: #f90;
-    padding: 8px;
-    border-radius: 0 0 4px 4px;
-    font-size: 10px;
-  }
+.pdf-page .page-loader {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #fff;
+}
 
-  .signature .data .email,
-  .signature .data .name {
-    display: inline-block;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    overflow: hidden;
-    color: #fff;
-    max-width: 100%;
-  }
+.pdf-page .page-loader.hidden {
+  display: none;
+}
 
-  .signature .data .email {
-    font-weight: 300;
-  }
+.pdf-page .pdf-page-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+.pdf-page .pdf-page-text {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 0.2;
+  line-height: 1;
+}
+
+.pdf-page .pdf-page-text ::selection {
+  background: rgb(0, 0, 255);
+}
+
+.pdf-page .pdf-page-text div {
+  color: transparent;
+  position: absolute;
+  cursor: text;
+  -webkit-transform-origin: 0% 0%;
+  -moz-transform-origin: 0% 0%;
+  -o-transform-origin: 0% 0%;
+  -ms-transform-origin: 0% 0%;
+  transform-origin: 0% 0%;
+}
+
+.pdf-page .pdf-page-signatures {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.signature {
+  display: flex;
+  width: 193px;
+  height: 139px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  flex-direction: column;
+  position: absolute;
+  pointer-events: none;
+  z-index: 9;
+  left: 0;
+  box-shadow: 1px 1px 6px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+.signature .draw {
+  height: 100%;
+  padding: 8px;
+  border-radius: 4px 4px 0 0;
+  background-color: #fff;
+  position: relative;
+}
+
+.signature .draw span.circle {
+  background-color: #f90;
+  color: #fff;
+  display: flex;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: all-scroll;
+  pointer-events: all;
+  justify-content: center;
+  position: absolute;
+  top: 0px;
+  left: -30px;
+}
+
+.signature .data {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: #f90;
+  padding: 8px;
+  border-radius: 0 0 4px 4px;
+  font-size: 10px;
+}
+
+.signature .data .email,
+.signature .data .name {
+  display: inline-block;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  color: #fff;
+  max-width: 100%;
+}
+
+.signature .data .email {
+  font-weight: 300;
+}
+
+code[class*=\'language-\'] {
+  color: #c5c8c6;
+  text-shadow: 0 1px rgba(0, 0, 0, 0.3);
+  font-family: Inconsolata, Monaco, Consolas, \'Courier New\', Courier, monospace;
+  direction: ltr;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  line-height: 1.5;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+  -webkit-hyphens: none;
+  -moz-hyphens: none;
+  -ms-hyphens: none;
+  hyphens: none;
+}
+pre {
+  margin: 0;
+  background-color: #fff;
+  display: block;
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+}
+pre[class*=\'language-\'] {
+  color: #c5c8c6;
+  text-shadow: 0 1px rgba(0, 0, 0, 0.3);
+  font-family: Inconsolata, Monaco, Consolas, \'Courier New\', Courier, monospace;
+  direction: ltr;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  line-height: 1.5;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+  -webkit-hyphens: none;
+  -moz-hyphens: none;
+  -ms-hyphens: none;
+  hyphens: none;
+  padding: 1em;
+  overflow: auto;
+  border-radius: 0.3em;
+}
+
+:not(pre) > code[class*=\'language-\'],
+pre[class*=\'language-\'] {
+  background: #1d1f21;
+}
+
+:not(pre) > code[class*=\'language-\'] {
+  padding: 0.1em;
+  border-radius: 0.3em;
+}
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #7c7c7c;
+}
+.token.punctuation {
+  color: #000000;
+}
+.namespace {
+  opacity: 0.7;
+}
+.token.property,
+.token.keyword,
+.token.tag {
+  color: #d94c4c;
+}
+.token.class-name {
+  color: #ffffb6;
+  text-decoration: underline;
+}
+.token.boolean,
+.token.constant {
+  color: #99cc99;
+}
+.token.symbol,
+.token.deleted {
+  color: #f92672;
+}
+.token.number {
+  color: #ff73fd;
+}
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: #2d41e5;
+}
+.token.variable {
+  color: #c6c5fe;
+}
+.token.operator {
+  color: #ededed;
+}
+.token.entity {
+  color: #ffffb6;
+}
+.token.url {
+  color: #96cbfe;
+}
+.language-css .token.string,
+.style .token.string {
+  color: #87c38a;
+}
+.token.atrule,
+.token.attr-value {
+  color: #8d7f14;
+}
+.token.function {
+  color: #dad085;
+}
+.token.regex {
+  color: #e9c062;
+}
+.token.important {
+  color: #fd971f;
+  font-weight: bold;
+}
+.token.bold {
+  font-weight: bold;
+}
+.token.italic {
+  font-style: italic;
+}
+.token.entity {
+  cursor: help;
+}

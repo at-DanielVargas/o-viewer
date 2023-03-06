@@ -1,7 +1,10 @@
-import { addEventListeners, ListenerMetadata } from './listen'
+import {
+  addEventListeners,
+  ListenerMetadata,
+  removeEventListeners
+} from './listen'
 import { initializeProps } from './prop'
 import { toKebabCase, toCamelCase } from './util'
-import { h, render } from 'petit-dom'
 
 export interface CustomElementMetadata {
   tag?: string
@@ -81,6 +84,11 @@ export const CustomElement = (args: CustomElementMetadata) => {
         initializeProps(this)
       }
 
+      disconnectedCallback() {
+        super.disconnectedCallback && super.disconnectedCallback()
+        removeEventListeners(this)
+      }
+
       __render() {
         if (this.__connected) return
         const template = document.createElement('template')
@@ -95,7 +103,6 @@ export const CustomElement = (args: CustomElementMetadata) => {
         ;(this.showShadowRoot ? this.shadowRoot : this).appendChild(
           document.importNode(template.content, true)
         )
-        // return render(args.template)
       }
     }
 

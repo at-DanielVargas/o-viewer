@@ -6,7 +6,7 @@ const ctx = await esbuild.context({
   entryPoints: ['src/index.ts'],
   bundle: true,
   outfile: './dist/bundle.js',
-  minify: true,
+  // minify: true,
   target: ['es6'],
   loader: {
     '.css': 'text'
