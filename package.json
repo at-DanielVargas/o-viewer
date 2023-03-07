@@ -1,6 +1,6 @@
 {
   "name": "literax-pdf-viewer",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "Visor de documentos pdf",
   "main": "dist/bundle.js",
   "unpkg": "dist/bundle.js",
@@ -9,12 +9,15 @@
     "dev": "node index.js",
     "build": "node build.js"
   },
-  "keywords": [],
+  "keywords": [
+    "pdf",
+    "custom element pdf"
+  ],
   "license": "ISC",
   "dependencies": {
     "interactjs": "^1.10.17",
     "parse5": "^5.1.1",
-    "pdfjs-dist": "^1.4.129",
+    "pdfjs-dist": "^3.4.120",
     "petit-dom": "^0.6.0"
   },
   "devDependencies": {

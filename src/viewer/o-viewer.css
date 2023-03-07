@@ -185,6 +185,10 @@
   line-height: 1;
 }
 
+.pdf-page .pdf-page-text * {
+  position: absolute;
+}
+
 .pdf-page .pdf-page-text ::selection {
   background: rgb(0, 0, 255);
 }

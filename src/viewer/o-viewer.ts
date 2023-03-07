@@ -6,9 +6,12 @@ import {
   Prop,
   Watch
 } from 'custom-elements-ts'
-declare const PDFJS: any
+import PDFJS from 'pdfjs-dist'
 declare const Prism: any
 import interactjs from 'interactjs'
+
+PDFJS.GlobalWorkerOptions.workerSrc =
+  `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS.version}/build/pdf.worker.min.js`
 
 export interface IViewport {
   viewBox: number[]
@@ -40,6 +43,8 @@ export class OrigonViewer extends HTMLElement {
   __xmlData: string
   __showXml: boolean = false
   __applyingZoom: boolean = false
+  __pageRendering: boolean = false
+  __pageNumPending: number | null
   __locales = {
     es: {
       show_pdf: 'Ver Pdf',
@@ -189,6 +194,10 @@ export class OrigonViewer extends HTMLElement {
   downZoom() {
     if (this.__zoom === 0 || this.__applyingZoom) return
     this.__zoom = this.__zoom - 1
+    document.documentElement.style.setProperty(
+      '--scale-factor',
+      String(this.__zoom)
+    )
     this.resizeElements()
     this.renderZoom()
   }
@@ -197,6 +206,10 @@ export class OrigonViewer extends HTMLElement {
   upZoom() {
     if (this.__zoom === 5 || this.__applyingZoom) return
     this.__zoom = this.__zoom + 1
+    document.documentElement.style.setProperty(
+      '--scale-factor',
+      String(this.__zoom)
+    )
     this.resizeElements()
     this.renderZoom()
   }
@@ -218,6 +231,7 @@ export class OrigonViewer extends HTMLElement {
 
   constructor() {
     super()
+    document.documentElement.style.setProperty('--scale-factor', '1')
   }
 
   renderZoom() {
@@ -259,8 +273,8 @@ export class OrigonViewer extends HTMLElement {
     container: HTMLDivElement,
     observer: IntersectionObserver
   ) {
-    this.__pdf.getPage(1).then((page) => {
-      const viewport = page.getViewport(this.__zooms[this.__zoom])
+    this.__pdf.getPage(number).then((page) => {
+      const viewport = page.getViewport({ scale: this.__zooms[this.__zoom] })
       const pdfPage = document.createElement('div')
       const loader = document.createElement('div')
       const canvas = document.createElement('canvas')
@@ -324,7 +338,9 @@ export class OrigonViewer extends HTMLElement {
               })
           },
           ondrop: (event) => {
-            const viewport = page.getViewport(this.__zooms[this.__zoom])
+            const viewport = page.getViewport({
+              scale: this.__zooms[this.__zoom]
+            })
             const droppedElement: HTMLDivElement = event.relatedTarget
             const targetContainer: HTMLDivElement = event.target
             this.shadowRoot
@@ -345,7 +361,6 @@ export class OrigonViewer extends HTMLElement {
               viewport.viewBox[2],
               viewport.viewBox[3]
             )
-
             this.signatureChanged.emit({
               detail: {
                 owner: {
@@ -368,103 +383,111 @@ export class OrigonViewer extends HTMLElement {
   }
 
   renderPage() {
-    this.__pdf.getPage(this.__currentPage).then((page) => {
-      if (this.__currentPage === this.__pageCount) {
-        this.lastPageRender.emit({ detail: { isRendered: true } })
-      }
-      const container = this.shadowRoot.querySelector(
-        `.page-${this.__currentPage}`
-      )
-      if (container) {
-        container.setAttribute('data-rendered', 'true')
-        container.classList.remove('rendering')
-        const pdfPage: HTMLDivElement = container.querySelector(`.pdf-page`)
-        const textLayer: HTMLDivElement =
-          pdfPage.querySelector(`.pdf-page-text`)
-        const canvas: HTMLCanvasElement =
-          pdfPage.querySelector(`.pdf-page-canvas`)
-        const loader = pdfPage.querySelector('.page-loader')
-        const ctx = canvas.getContext('2d')
-        const viewport = page.getViewport(this.__zooms[this.__zoom], 0, true)
-
-        pdfPage.style.height = `${viewport.height}px`
-        pdfPage.style.width = `${viewport.width}px`
-        canvas.height = viewport.height
-        canvas.width = viewport.width
-        textLayer.style.height = `${viewport.height}px`
-        textLayer.style.width = `${viewport.width}px`
-        textLayer.innerHTML = ''
-
-        if (this.__displaySignatures) {
-          const pageSignatures: HTMLDivElement =
-            pdfPage.querySelector(`.pdf-page-signatures`)
-          this.__signatures
-            .filter((s) => s.page === this.__currentPage)
-            .forEach((signature) => {
-              const card = document.createElement('div')
-              card.style.top = `${signature.coords.y}px`
-              card.style.left = `${signature.coords.x}px`
-              card.className = 'signature'
-              card.setAttribute('data-owner', `${signature.owner.id}`)
-              card.setAttribute('data-top', `${signature.coords.y}`)
-              card.setAttribute('data-left', `${signature.coords.x}`)
-              const color = this.getColorFromEmail(signature.owner.email)
-              card.innerHTML = `<div class="draw"><span class="fal fa-thumbtack circle" style="background-color: ${color};"></span></div><div class="data" style="background-color: ${color};"><div class="name">${signature.owner.name}</div><div class="email">${signature.owner.email}</div></div>`
-              interactjs(card)
-                .allowFrom('.circle')
-                .draggable({
-                  inertia: false,
-                  autoScroll: { container: pageSignatures },
-                  onmove: (event) => {
-                    const target = event.target
-
-                    const x =
-                      (parseFloat(target.getAttribute('data-x')) || 0) +
-                      event.dx
-                    const y =
-                      (parseFloat(target.getAttribute('data-y')) || 0) +
-                      event.dy
-
-                    target.style.webkitTransform = target.style.transform =
-                      'translate(' + x + 'px, ' + y + 'px)'
-
-                    target.setAttribute('data-x', x)
-                    target.setAttribute('data-y', y)
-                  }
-                })
-              pageSignatures.appendChild(card)
-            })
+    if (this.__pageRendering) {
+      this.__pageNumPending = this.__currentPage
+    } else {
+      this.__pageRendering = true
+      this.__pdf.getPage(this.__currentPage).then((page) => {
+        if (this.__currentPage === this.__pageCount) {
+          this.lastPageRender.emit({ detail: { isRendered: true } })
         }
-        ctx.clearRect(0, 0, viewport.width, viewport.height)
-        ctx.fillStyle = '#FFFFFF'
-        ctx.fillRect(0, 0, viewport.width, viewport.height)
-
-        const renderCtx = {
-          canvasContext: ctx,
-          viewport: viewport
-        }
-
-        page.render(renderCtx).then(() => {
-          loader.classList.add('hidden')
-          this.__applyingZoom = false
-        })
-
-        page.getTextContent().then((text) => {
-          const textContent = PDFJS.renderTextLayer({
-            container: textLayer,
-            pageIndex: page.pageIndex,
-            viewport,
-            textContent: text,
-            textDivs: []
+        const container = this.shadowRoot.querySelector(
+          `.page-${this.__currentPage}`
+        )
+        if (container) {
+          container.setAttribute('data-rendered', 'true')
+          container.classList.remove('rendering')
+          const pdfPage: HTMLDivElement = container.querySelector(`.pdf-page`)
+          const textLayer: HTMLDivElement =
+            pdfPage.querySelector(`.pdf-page-text`)
+          const canvas: HTMLCanvasElement =
+            pdfPage.querySelector(`.pdf-page-canvas`)
+          const loader = pdfPage.querySelector('.page-loader')
+          const ctx = canvas.getContext('2d')
+          const viewport = page.getViewport({
+            scale: this.__zooms[this.__zoom]
           })
-        })
-      }
-    })
+
+          pdfPage.style.height = `${viewport.height}px`
+          pdfPage.style.width = `${viewport.width}px`
+          canvas.height = viewport.height
+          canvas.width = viewport.width
+          textLayer.style.height = `${viewport.height}px`
+          textLayer.style.width = `${viewport.width}px`
+          textLayer.innerHTML = ''
+
+          if (this.__displaySignatures) {
+            const pageSignatures: HTMLDivElement =
+              pdfPage.querySelector(`.pdf-page-signatures`)
+            this.__signatures
+              .filter((s) => s.page === this.__currentPage)
+              .forEach((signature) => {
+                const cardExists = pageSignatures.querySelector(
+                  `.signature[data-owner="${signature.owner.id}"]`
+                )
+                if (cardExists) return
+                const card = document.createElement('div')
+                card.style.top = `${signature.coords.y}px`
+                card.style.left = `${signature.coords.x}px`
+                card.className = 'signature'
+                card.setAttribute('data-owner', `${signature.owner.id}`)
+                card.setAttribute('data-top', `${signature.coords.y}`)
+                card.setAttribute('data-left', `${signature.coords.x}`)
+                const color = this.getColorFromEmail(signature.owner.email)
+                const textColor = this.getTextColorFromBackgroundColor(color)
+                card.innerHTML = `<div class="draw"><span class="fal fa-thumbtack circle" style="background-color: ${color};"></span></div><div class="data" style="background-color: ${color};"><div class="name" style="color: ${textColor};">${signature.owner.name}</div><div class="email" style="color: ${textColor};">${signature.owner.email}</div></div>`
+                interactjs(card)
+                  .allowFrom('.circle')
+                  .draggable({
+                    inertia: false,
+                    autoScroll: { container: pageSignatures },
+                    onmove: (event) => {
+                      const target = event.target
+
+                      const x =
+                        (parseFloat(target.getAttribute('data-x')) || 0) +
+                        event.dx
+                      const y =
+                        (parseFloat(target.getAttribute('data-y')) || 0) +
+                        event.dy
+
+                      target.style.webkitTransform = target.style.transform =
+                        'translate(' + x + 'px, ' + y + 'px)'
+
+                      target.setAttribute('data-x', x)
+                      target.setAttribute('data-y', y)
+                    }
+                  })
+                pageSignatures.appendChild(card)
+              })
+          }
+          ctx.clearRect(0, 0, viewport.width, viewport.height)
+          ctx.fillStyle = '#FFFFFF'
+          ctx.fillRect(0, 0, viewport.width, viewport.height)
+
+          const renderCtx = {
+            canvasContext: ctx,
+            viewport: viewport
+          }
+
+          const renderTask = page.render(renderCtx)
+
+          renderTask.promise.then(() => {
+            this.__pageRendering = false
+            loader.classList.add('hidden')
+            this.__applyingZoom = false
+            if (this.__pageNumPending !== null) {
+              this.renderPage()
+              this.__pageNumPending = null
+            }
+          })
+        }
+      })
+    }
   }
 
   resizeElements() {
     this.__applyingZoom = true
-    this.shadowRoot.querySelector('#document').scrollTo(0, 0)
     const renderedPages = this.shadowRoot.querySelectorAll('.page')
     for (let i = 0; i < renderedPages.length; i++) {
       this.__pdf.getPage(i + 1).then((page) => {
@@ -476,7 +499,7 @@ export class OrigonViewer extends HTMLElement {
           pdfPage.querySelector(`.pdf-page-canvas`)
         const loader = container.querySelector('.page-loader')
         const ctx = canvas.getContext('2d')
-        const viewport = page.getViewport(this.__zooms[this.__zoom], 0, true)
+        const viewport = page.getViewport({ scale: this.__zooms[this.__zoom] })
 
         pdfPage.style.height = `${viewport.height}px`
         pdfPage.style.width = `${viewport.width}px`
@@ -487,7 +510,9 @@ export class OrigonViewer extends HTMLElement {
         textLayer.style.height = `${viewport.height}px`
         textLayer.style.width = `${viewport.width}px`
         textLayer.innerHTML = ''
-        loader.classList.remove('hidden')
+        if (this.__currentPage !== i + 1) {
+          loader.classList.remove('hidden')
+        }
 
         if (this.__displaySignatures) {
           const pageSignatures: HTMLDivElement = pdfPage.querySelector(
@@ -508,21 +533,13 @@ export class OrigonViewer extends HTMLElement {
           viewport: viewport
         }
 
-        page.render(renderCtx).then(() => {
+        const renderTask = page.render(renderCtx)
+
+        renderTask.promise.then(() => {
           if (i === 0) {
             loader.classList.add('hidden')
           }
           this.__applyingZoom = false
-        })
-
-        page.getTextContent().then((text) => {
-          const textContent = PDFJS.renderTextLayer({
-            container: textLayer,
-            pageIndex: page.pageIndex,
-            viewport,
-            textContent: text,
-            textDivs: []
-          })
         })
       })
     }
@@ -540,6 +557,21 @@ export class OrigonViewer extends HTMLElement {
     }
 
     return '#' + color
+  }
+
+  getTextColorFromBackgroundColor(bgColor: string) {
+    const [r, g, b] = [
+      parseInt(bgColor.substr(1, 2), 16),
+      parseInt(bgColor.substr(3, 2), 16),
+      parseInt(bgColor.substr(5, 2), 16)
+    ]
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000
+
+    if (brightness >= 128) {
+      return '#000000'
+    } else {
+      return '#ffffff'
+    }
   }
 
   calculatePositionsOnResize(
