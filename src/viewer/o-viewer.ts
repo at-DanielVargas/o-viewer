@@ -9,9 +9,9 @@ import {
 import PDFJS from 'pdfjs-dist'
 declare const Prism: any
 import interactjs from 'interactjs'
+import { SignaturePosition } from './interfaces'
 
-PDFJS.GlobalWorkerOptions.workerSrc =
-  `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS.version}/build/pdf.worker.min.js`
+PDFJS.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS.version}/build/pdf.worker.min.js`
 
 export interface IViewport {
   viewBox: number[]
@@ -33,7 +33,7 @@ export interface IViewport {
 export class OrigonViewer extends HTMLElement {
   __url: string
   __raw: string
-  __signatures: any[]
+  __signatures: SignaturePosition[]
   __pdf: any
   __currentPage: number = 1
   __pageCount: number
@@ -44,19 +44,21 @@ export class OrigonViewer extends HTMLElement {
   __showXml: boolean = false
   __applyingZoom: boolean = false
   __pageRendering: boolean = false
-  __pageNumPending: number | null
+  __pagenumpending: number | null
   __locales = {
     es: {
       show_pdf: 'Ver Pdf',
       show_xml: 'Ver Xml',
       download_error: 'Ocurrió un error al descargar el archivo...',
-      loading_text: 'Cargando...'
+      loading_text: 'Cargando...',
+      signatureError: 'La posición de firma no puede colocarse entre 2 páginas'
     },
     en: {
       show_pdf: 'Show Pdf',
       show_xml: 'Show Xml',
       download_error: 'An error occurred while downloading the file',
-      loading_text: 'Loading...'
+      loading_text: 'Loading...',
+      signatureError: 'Signature position cannot be placed between 2 pages'
     }
   }
   __displaySignatures: boolean
@@ -187,7 +189,7 @@ export class OrigonViewer extends HTMLElement {
   parseSignatures(): void {
     const decoded = JSON.parse(decodeURIComponent(this.signatures))
     this.__signatures = decoded
-    this.resizeElements()
+    this.resizeElements(true)
   }
 
   @Listen('click', '#downZoom')
@@ -361,18 +363,39 @@ export class OrigonViewer extends HTMLElement {
               viewport.viewBox[2],
               viewport.viewBox[3]
             )
-            this.signatureChanged.emit({
-              detail: {
-                owner: {
-                  id: parseInt(droppedElement.getAttribute('data-owner'))
-                },
-                coords: {
-                  page: parseInt(event.target.getAttribute('data-page')),
-                  y: newY,
-                  x: newX
+            if (
+              newY >
+              viewport.viewBox[3] - this.__elementSizes.signatures.height / 2
+            ) {
+              droppedElement.style.top = `${droppedElement.getAttribute(
+                'data-top'
+              )}px`
+              droppedElement.style.left = `${droppedElement.getAttribute(
+                'data-left'
+              )}px`
+              droppedElement.style.transform = ''
+              droppedElement.removeAttribute('data-x')
+              droppedElement.removeAttribute('data-y')
+              this.error.emit({
+                detail: {
+                  message: this.__currentLang.signatureError,
+                  code: 'signature.positions'
                 }
-              }
-            })
+              })
+            } else {
+              this.signatureChanged.emit({
+                detail: {
+                  owner: {
+                    id: parseInt(droppedElement.getAttribute('data-owner'))
+                  },
+                  coords: {
+                    page: parseInt(event.target.getAttribute('data-page')),
+                    y: newY,
+                    x: newX
+                  }
+                }
+              })
+            }
           }
         })
         pdfPage.appendChild(pageSignatures)
@@ -382,111 +405,126 @@ export class OrigonViewer extends HTMLElement {
     })
   }
 
-  renderPage() {
+  generateCardAndAppendToContainer(
+    signature: SignaturePosition,
+    container: HTMLDivElement
+  ): void {
+    const cardExists: HTMLDivElement = container.querySelector(
+      `.signature[data-owner="${signature.owner.id}"]`
+    )
+    if (cardExists) {
+      cardExists.style.top = `${signature.coords.y}px`
+      cardExists.style.left = `${signature.coords.x}px`
+      cardExists.setAttribute('data-top', `${signature.coords.y}`)
+      cardExists.setAttribute('data-left', `${signature.coords.x}`)
+      return
+    }
+    const card = document.createElement('div')
+    card.style.top = `${signature.coords.y}px`
+    card.style.left = `${signature.coords.x}px`
+    card.className = 'signature'
+    card.setAttribute('data-owner', `${signature.owner.id}`)
+    card.setAttribute('data-top', `${signature.coords.y}`)
+    card.setAttribute('data-left', `${signature.coords.x}`)
+    const color = this.getColorFromEmail(signature.owner.email)
+    const textColor = this.getTextColorFromBackgroundColor(color)
+    card.innerHTML = `<div class="draw"><span class="fal fa-thumbtack circle" style="background-color: ${color};"></span></div><div class="data" style="background-color: ${color};"><div class="name" style="color: ${textColor};">${signature.owner.name}</div><div class="email" style="color: ${textColor};">${signature.owner.email}</div></div>`
+    interactjs(card)
+      .allowFrom('.circle')
+      .draggable({
+        inertia: false,
+        autoScroll: { container },
+        onmove: (event) => {
+          const target = event.target
+
+          const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx
+          const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy
+
+          target.style.webkitTransform = target.style.transform =
+            'translate(' + x + 'px, ' + y + 'px)'
+
+          target.setAttribute('data-x', x)
+          target.setAttribute('data-y', y)
+        }
+      })
+
+    container.appendChild(card)
+  }
+
+  renderPage(pageNum?: number) {
     if (this.__pageRendering) {
       this.__pageNumPending = this.__currentPage
     } else {
       this.__pageRendering = true
-      this.__pdf.getPage(this.__currentPage).then((page) => {
-        if (this.__currentPage === this.__pageCount) {
-          this.lastPageRender.emit({ detail: { isRendered: true } })
-        }
-        const container = this.shadowRoot.querySelector(
-          `.page-${this.__currentPage}`
-        )
-        if (container) {
-          container.setAttribute('data-rendered', 'true')
-          container.classList.remove('rendering')
-          const pdfPage: HTMLDivElement = container.querySelector(`.pdf-page`)
-          const textLayer: HTMLDivElement =
-            pdfPage.querySelector(`.pdf-page-text`)
-          const canvas: HTMLCanvasElement =
-            pdfPage.querySelector(`.pdf-page-canvas`)
-          const loader = pdfPage.querySelector('.page-loader')
-          const ctx = canvas.getContext('2d')
-          const viewport = page.getViewport({
-            scale: this.__zooms[this.__zoom]
-          })
-
-          pdfPage.style.height = `${viewport.height}px`
-          pdfPage.style.width = `${viewport.width}px`
-          canvas.height = viewport.height
-          canvas.width = viewport.width
-          textLayer.style.height = `${viewport.height}px`
-          textLayer.style.width = `${viewport.width}px`
-          textLayer.innerHTML = ''
-
-          if (this.__displaySignatures) {
-            const pageSignatures: HTMLDivElement =
-              pdfPage.querySelector(`.pdf-page-signatures`)
-            this.__signatures
-              .filter((s) => s.page === this.__currentPage)
-              .forEach((signature) => {
-                const cardExists = pageSignatures.querySelector(
-                  `.signature[data-owner="${signature.owner.id}"]`
-                )
-                if (cardExists) return
-                const card = document.createElement('div')
-                card.style.top = `${signature.coords.y}px`
-                card.style.left = `${signature.coords.x}px`
-                card.className = 'signature'
-                card.setAttribute('data-owner', `${signature.owner.id}`)
-                card.setAttribute('data-top', `${signature.coords.y}`)
-                card.setAttribute('data-left', `${signature.coords.x}`)
-                const color = this.getColorFromEmail(signature.owner.email)
-                const textColor = this.getTextColorFromBackgroundColor(color)
-                card.innerHTML = `<div class="draw"><span class="fal fa-thumbtack circle" style="background-color: ${color};"></span></div><div class="data" style="background-color: ${color};"><div class="name" style="color: ${textColor};">${signature.owner.name}</div><div class="email" style="color: ${textColor};">${signature.owner.email}</div></div>`
-                interactjs(card)
-                  .allowFrom('.circle')
-                  .draggable({
-                    inertia: false,
-                    autoScroll: { container: pageSignatures },
-                    onmove: (event) => {
-                      const target = event.target
-
-                      const x =
-                        (parseFloat(target.getAttribute('data-x')) || 0) +
-                        event.dx
-                      const y =
-                        (parseFloat(target.getAttribute('data-y')) || 0) +
-                        event.dy
-
-                      target.style.webkitTransform = target.style.transform =
-                        'translate(' + x + 'px, ' + y + 'px)'
-
-                      target.setAttribute('data-x', x)
-                      target.setAttribute('data-y', y)
-                    }
-                  })
-                pageSignatures.appendChild(card)
-              })
+      this.__pdf
+        .getPage(pageNum ? pageNum : this.__currentPage)
+        .then((page) => {
+          if (this.__currentPage === this.__pageCount) {
+            this.lastPageRender.emit({ detail: { isRendered: true } })
           }
-          ctx.clearRect(0, 0, viewport.width, viewport.height)
-          ctx.fillStyle = '#FFFFFF'
-          ctx.fillRect(0, 0, viewport.width, viewport.height)
+          const container = this.shadowRoot.querySelector(
+            `.page-${this.__currentPage}`
+          )
+          if (container) {
+            container.setAttribute('data-rendered', 'true')
+            container.classList.remove('rendering')
+            const pdfPage: HTMLDivElement = container.querySelector(`.pdf-page`)
+            const textLayer: HTMLDivElement =
+              pdfPage.querySelector(`.pdf-page-text`)
+            const canvas: HTMLCanvasElement =
+              pdfPage.querySelector(`.pdf-page-canvas`)
+            const loader = pdfPage.querySelector('.page-loader')
+            const ctx = canvas.getContext('2d')
+            const viewport = page.getViewport({
+              scale: this.__zooms[this.__zoom]
+            })
 
-          const renderCtx = {
-            canvasContext: ctx,
-            viewport: viewport
-          }
+            pdfPage.style.height = `${viewport.height}px`
+            pdfPage.style.width = `${viewport.width}px`
+            canvas.height = viewport.height
+            canvas.width = viewport.width
+            textLayer.style.height = `${viewport.height}px`
+            textLayer.style.width = `${viewport.width}px`
+            textLayer.innerHTML = ''
 
-          const renderTask = page.render(renderCtx)
-
-          renderTask.promise.then(() => {
-            this.__pageRendering = false
-            loader.classList.add('hidden')
-            this.__applyingZoom = false
-            if (this.__pageNumPending !== null) {
-              this.renderPage()
-              this.__pageNumPending = null
+            if (this.__displaySignatures) {
+              const pageSignatures: HTMLDivElement =
+                pdfPage.querySelector(`.pdf-page-signatures`)
+              this.__signatures
+                .filter((s) => s.page === this.__currentPage)
+                .forEach((signature) => {
+                  this.generateCardAndAppendToContainer(
+                    signature,
+                    pageSignatures
+                  )
+                })
             }
-          })
-        }
-      })
+            ctx.clearRect(0, 0, viewport.width, viewport.height)
+            ctx.fillStyle = '#FFFFFF'
+            ctx.fillRect(0, 0, viewport.width, viewport.height)
+
+            const renderCtx = {
+              canvasContext: ctx,
+              viewport: viewport
+            }
+
+            const renderTask = page.render(renderCtx)
+
+            renderTask.promise.then(() => {
+              this.__pageRendering = false
+              loader.classList.add('hidden')
+              this.__applyingZoom = false
+              if (this.__pageNumPending !== null) {
+                this.renderPage()
+                this.__pageNumPending = null
+              }
+            })
+          }
+        })
     }
   }
 
-  resizeElements() {
+  resizeElements(clear?: boolean) {
     this.__applyingZoom = true
     const renderedPages = this.shadowRoot.querySelectorAll('.page')
     for (let i = 0; i < renderedPages.length; i++) {
@@ -510,9 +548,9 @@ export class OrigonViewer extends HTMLElement {
         textLayer.style.height = `${viewport.height}px`
         textLayer.style.width = `${viewport.width}px`
         textLayer.innerHTML = ''
-        if (this.__currentPage !== i + 1) {
-          loader.classList.remove('hidden')
-        }
+        // if (this.__currentPage !== i + 1) {
+        //loader.classList.remove('hidden')
+        //}
 
         if (this.__displaySignatures) {
           const pageSignatures: HTMLDivElement = pdfPage.querySelector(
@@ -521,6 +559,19 @@ export class OrigonViewer extends HTMLElement {
 
           pageSignatures.style.height = `${viewport.height}px`
           pageSignatures.style.width = `${viewport.width}px`
+
+          if (clear) {
+            pageSignatures
+              .querySelectorAll('.signature')
+              .forEach((signatureCard) => {
+                signatureCard.remove()
+              })
+            this.__signatures
+              .filter((signature) => signature.page === i + 1)
+              .forEach((signature) => {
+                this.generateCardAndAppendToContainer(signature, pageSignatures)
+              })
+          }
 
           this.scaleSignature(pageSignatures, viewport)
         }
@@ -536,9 +587,9 @@ export class OrigonViewer extends HTMLElement {
         const renderTask = page.render(renderCtx)
 
         renderTask.promise.then(() => {
-          if (i === 0) {
-            loader.classList.add('hidden')
-          }
+          // if (i === 0) {
+          //  loader.classList.add('hidden')
+          //}
           this.__applyingZoom = false
         })
       })
