@@ -46,7 +46,7 @@
   width: 100%;
   position: absolute;
   top: 0;
-  z-index: 10;
+  z-index: 21;
 }
 
 .controls .counter,
@@ -58,6 +58,25 @@
   justify-content: flex-end;
   padding: 0 5px;
   box-sizing: border-box;
+}
+.controls .counter .pages {
+  display: none;
+  background-color: #a2a2a2;
+  border-radius: 2px;
+  margin-right: auto;
+  padding: 0 6px;
+  color: #fff;
+}
+
+.controls .counter .pages .current {
+  position: relative;
+}
+.controls .counter .pages .total {
+  position: relative;
+}
+.controls .counter .pages .total:before {
+  content: attr(data-separator);
+  margin: 0 3px;
 }
 
 .controls .xml button {
@@ -187,6 +206,11 @@
 
 .pdf-page .pdf-page-text * {
   position: absolute;
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
 }
 
 .pdf-page .pdf-page-text ::selection {
