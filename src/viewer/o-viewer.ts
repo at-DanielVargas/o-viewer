@@ -6,7 +6,12 @@ import {
   Prop,
   Watch
 } from 'custom-elements-ts'
-import PDFJS from 'pdfjs-dist'
+import PDFJS, {
+  PageViewport,
+  PDFDocumentProxy,
+  PDFPageProxy,
+  RenderTask
+} from 'pdfjs-dist'
 declare const Prism: any
 import interactjs from 'interactjs'
 import { SignaturePosition } from './interfaces'
@@ -34,7 +39,7 @@ export class OrigonViewer extends HTMLElement {
   __url: string
   __raw: string
   __signatures: SignaturePosition[]
-  __pdf: any
+  __pdf: PDFDocumentProxy
   __currentPage: number = 1
   __pageCount: number
   __zooms: number[] = [0.5, 0.75, 1.0, 1.5, 2.0, 3.0]
@@ -72,7 +77,7 @@ export class OrigonViewer extends HTMLElement {
     }
   }
 
-  __renderTask: any = null
+  __renderTask: { promise: Promise<RenderTask>; cancel: () => void } = null
 
   @Dispatch() error: DispatchEmitter
   @Dispatch() signatureChanged: DispatchEmitter
@@ -191,7 +196,7 @@ export class OrigonViewer extends HTMLElement {
   parseSignatures(): void {
     const decoded = JSON.parse(decodeURIComponent(this.signatures))
     this.__signatures = decoded
-    //this.resizeElements(true)
+    this.resizeElements({ clear: true, fromParse: false })
   }
 
   @Listen('click', '#downZoom')
@@ -236,7 +241,6 @@ export class OrigonViewer extends HTMLElement {
   constructor() {
     super()
     document.documentElement.style.setProperty('--scale-factor', '1')
-    console.log(PDFJS)
   }
 
   renderZoom() {
@@ -278,7 +282,7 @@ export class OrigonViewer extends HTMLElement {
     container: HTMLDivElement,
     observer: IntersectionObserver
   ) {
-    this.__pdf.getPage(number).then((page) => {
+    this.__pdf.getPage(number).then((page: PDFPageProxy) => {
       const viewport = page.getViewport({ scale: this.__zooms[this.__zoom] })
       const pdfPage = document.createElement('div')
       const loader = document.createElement('div')
@@ -461,7 +465,7 @@ export class OrigonViewer extends HTMLElement {
       this.__pageRendering = true
       this.__pdf
         .getPage(pageNum ? pageNum : this.__currentPage)
-        .then((page) => {
+        .then((page: PDFPageProxy) => {
           if (this.__currentPage === this.__pageCount) {
             this.lastPageRender.emit({ detail: { isRendered: true } })
           }
@@ -511,8 +515,10 @@ export class OrigonViewer extends HTMLElement {
               viewport: viewport
             }
 
+            if (this.__renderTask) {
+              this.__renderTask.cancel()
+            }
             this.__renderTask = this.cancelableRenderTask(page, renderCtx)
-
             this.__renderTask.promise.then(() => {
               this.__pageRendering = false
               loader.classList.add('hidden')
@@ -522,117 +528,124 @@ export class OrigonViewer extends HTMLElement {
                 this.__pageNumPending = null
               }
             })
+            this.__renderTask.promise.catch((e) => {})
           }
         })
     }
   }
 
-  resizeElements(props?: { clear?: boolean; fromZoom: boolean }) {
+  resizeElements(
+    props: { clear?: boolean; fromZoom?: boolean; fromParse?: boolean } = {
+      fromParse: true
+    }
+  ) {
     const [up, down] = [
       this.shadowRoot.querySelector('#upZoom') as HTMLButtonElement,
       this.shadowRoot.querySelector('#downZoom') as HTMLButtonElement
     ]
-    if (props.fromZoom && this.__applyingZoom) return
-    if (this.__pageRendering) {
-      this.__pageNumPending = this.__currentPage
-    } else {
-      this.__pageRendering = true
-      this.__applyingZoom = true
-      const renderedPages = this.shadowRoot.querySelectorAll('.page')
-      for (let i = 0; i < renderedPages.length; i++) {
-        this.__pdf.getPage(i + 1).then((page) => {
-          const container = renderedPages[i]
-          const pdfPage: HTMLDivElement = container.querySelector(`.pdf-page`)
-          const textLayer: HTMLDivElement =
-            pdfPage.querySelector(`.pdf-page-text`)
-          const canvas: HTMLCanvasElement =
-            pdfPage.querySelector(`.pdf-page-canvas`)
-          const loader = container.querySelector('.page-loader')
-          const ctx = canvas.getContext('2d')
-          const viewport = page.getViewport({
-            scale: this.__zooms[this.__zoom]
-          })
-          if (props.fromZoom) {
-            up.setAttribute('disabled', 'true')
-            down.setAttribute('disabled', 'true')
-            loader.classList.remove('hidden')
-            page.cleanup()
-          }
-
-          pdfPage.style.height = `${viewport.height}px`
-          pdfPage.style.width = `${viewport.width}px`
-          canvas.height = viewport.height
-          canvas.width = viewport.width
-          canvas.style.width = `${viewport.width}px`
-          canvas.style.height = `${viewport.height}px`
-          textLayer.style.height = `${viewport.height}px`
-          textLayer.style.width = `${viewport.width}px`
-          textLayer.innerHTML = ''
-
-          if (this.__displaySignatures) {
-            const pageSignatures: HTMLDivElement = pdfPage.querySelector(
-              '.pdf-page-signatures'
-            )
-
-            pageSignatures.style.height = `${viewport.height}px`
-            pageSignatures.style.width = `${viewport.width}px`
-
-            if (props.clear) {
-              pageSignatures
-                .querySelectorAll('.signature')
-                .forEach((signatureCard) => {
-                  signatureCard.remove()
-                })
-              this.__signatures
-                .filter((signature) => signature.page === i + 1)
-                .forEach((signature) => {
-                  this.generateCardAndAppendToContainer(
-                    signature,
-                    pageSignatures
-                  )
-                })
-            }
-
-            this.scaleSignature(pageSignatures, viewport)
-          }
-          ctx.clearRect(0, 0, viewport.width, viewport.height)
-          ctx.fillStyle = '#FFFFFF'
-          ctx.fillRect(0, 0, viewport.width, viewport.height)
-
-          const renderCtx = {
-            canvasContext: ctx,
-            viewport: viewport
-          }
-          if (this.__renderTask && !container.hasAttribute('data-rendered')) {
-            this.__renderTask.cancel()
-          }
-          this.__renderTask = this.cancelableRenderTask(page, renderCtx)
-
-          this.__renderTask.promise.then(() => {
-            if (this.__pageNumPending !== null) {
-              this.renderPage()
-              this.__pageNumPending = null
-            }
-          })
-          this.__renderTask.promise.finally(() => {
-            setTimeout(
-              () => {
-                up.removeAttribute('disabled')
-                down.removeAttribute('disabled')
-              },
-              this.__zoom > 1 ? 400 : 200
-            )
-            loader.classList.add('hidden')
-            this.__pageRendering = false
-            this.__applyingZoom = false
-          })
+    this.__applyingZoom = true
+    const renderedPages = this.shadowRoot.querySelectorAll('.page')
+    for (let i = 0; i < renderedPages.length; i++) {
+      this.__pdf.getPage(i + 1).then((page: PDFPageProxy) => {
+        const container = renderedPages[i]
+        const pdfPage: HTMLDivElement = container.querySelector(`.pdf-page`)
+        const textLayer: HTMLDivElement =
+          pdfPage.querySelector(`.pdf-page-text`)
+        const canvas: HTMLCanvasElement =
+          pdfPage.querySelector(`.pdf-page-canvas`)
+        const loader = container.querySelector('.page-loader')
+        const ctx = canvas.getContext('2d')
+        const viewport = page.getViewport({
+          scale: this.__zooms[this.__zoom]
         })
-      }
+        if (props.fromZoom) {
+          up.setAttribute('disabled', 'true')
+          down.setAttribute('disabled', 'true')
+          loader.classList.remove('hidden')
+          page.cleanup(true)
+        }
+
+        pdfPage.style.height = `${viewport.height}px`
+        pdfPage.style.width = `${viewport.width}px`
+        canvas.height = viewport.height
+        canvas.width = viewport.width
+        canvas.style.width = `${viewport.width}px`
+        canvas.style.height = `${viewport.height}px`
+        textLayer.style.height = `${viewport.height}px`
+        textLayer.style.width = `${viewport.width}px`
+        textLayer.innerHTML = ''
+
+        if (this.__displaySignatures) {
+          const pageSignatures: HTMLDivElement = pdfPage.querySelector(
+            '.pdf-page-signatures'
+          )
+
+          pageSignatures.style.height = `${viewport.height}px`
+          pageSignatures.style.width = `${viewport.width}px`
+
+          if (props.clear) {
+            pageSignatures
+              .querySelectorAll('.signature')
+              .forEach((signatureCard) => {
+                signatureCard.remove()
+              })
+            this.__signatures
+              .filter((signature) => signature.page === i + 1)
+              .forEach((signature) => {
+                this.generateCardAndAppendToContainer(signature, pageSignatures)
+              })
+          }
+
+          this.scaleSignature(pageSignatures, viewport)
+        }
+        ctx.clearRect(0, 0, viewport.width, viewport.height)
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fillRect(0, 0, viewport.width, viewport.height)
+
+        const renderCtx = {
+          canvasContext: ctx,
+          viewport: viewport
+        }
+        if (
+          container.hasAttribute('data-rendered') &&
+          props.fromZoom &&
+          parseInt(container.getAttribute('data-page')) === i + 1
+        ) {
+          if (this.__pageNumPending === i + 1) {
+            page.cleanup(true)
+            this.renderPage(i+1)
+          } else {
+            this.__pageRendering = true
+            this.__renderTask.promise.then(() => {
+              if (this.__pageNumPending !== null) {
+                this.renderPage()
+                this.__pageNumPending = null
+              }
+            })
+          }
+        } else {
+          console.log('pagina no renderizada', i + 1)
+          this.__renderTask = this.cancelableRenderTask(page, renderCtx)
+        }
+
+        this.__renderTask.promise.finally(() => {
+          setTimeout(
+            () => {
+              up.removeAttribute('disabled')
+              down.removeAttribute('disabled')
+            },
+            this.__zoom > 1 ? 400 : 200
+          )
+          loader.classList.add('hidden')
+          this.__pageRendering = false
+          this.__applyingZoom = false
+        })
+      })
     }
   }
 
   getColorFromEmail(email: string) {
-    const hash = email.split('').reduce(function(prev, next) {
+    const hash = email.split('').reduce(function (prev, next) {
       return (prev << 5) - prev + next.charCodeAt(0)
     }, 0)
 
@@ -699,7 +712,7 @@ export class OrigonViewer extends HTMLElement {
     return URL.createObjectURL(blob)
   }
 
-  scaleSignature(parent: HTMLDivElement, viewport: IViewport) {
+  scaleSignature(parent: HTMLDivElement, viewport: PageViewport) {
     const signatures = parent.querySelectorAll('.signature')
     const originalScale = 10
 
@@ -723,6 +736,11 @@ export class OrigonViewer extends HTMLElement {
       signature.style.left = `${newX}px`
       signature.style.top = `${newY}px`
       signature.style.fontSize = `${newScale}px`
+      if (this.__zooms[this.__zoom] < 1 || this.__zooms[this.__zoom] > 1) {
+        signature.style.display = 'none'
+      } else {
+        signature.style.display = 'flex'
+      }
     })
   }
 
@@ -734,11 +752,14 @@ export class OrigonViewer extends HTMLElement {
     return b64
   }
 
-  cancelableRenderTask(page, context) {
+  cancelableRenderTask(
+    page: PDFPageProxy,
+    context
+  ): { promise: Promise<any>; cancel: () => void } {
     let renderTask = page.render(context)
     let isCanceled = false
 
-    const wrappedPromise = new Promise((resolve, reject) => {
+    const wrappedPromise = new Promise<RenderTask>((resolve: any, reject) => {
       renderTask.promise.then(() => {
         if (!isCanceled) {
           resolve()
@@ -759,7 +780,7 @@ export class OrigonViewer extends HTMLElement {
       promise: wrappedPromise,
       cancel() {
         isCanceled = true
-        renderTask.cancel()
+        renderTask.cancel(0)
       }
     }
   }
